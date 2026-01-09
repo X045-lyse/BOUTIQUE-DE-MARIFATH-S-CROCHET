@@ -271,14 +271,41 @@ const App: React.FC = () => {
   const deleteProduct = async (id: string) => {
     if (!confirm("Voulez-vous vraiment supprimer ce produit ?")) return;
 
-    const { error } = await supabase.from('products').delete().eq('id', id);
-    if (error) {
-      alert("Impossible de supprimer ce produit.");
-      console.error(error);
-      return;
-    }
+    try {
+      // fetch the product to know the stored image
+      const { data: prodData, error: prodError } = await supabase.from('products').select('image').eq('id', id).single();
+      if (prodError) {
+        console.error('Failed to fetch product before delete', prodError);
+      } else {
+        const img = prodData?.image as string | undefined;
+        // If image is a Supabase public URL, try to remove the underlying object
+        if (img && SUPABASE_BUCKET && img.startsWith('http') && img.includes('/storage/v1/object/public/')) {
+          try {
+            const marker = `/storage/v1/object/public/${String(SUPABASE_BUCKET)}/`;
+            const parts = img.split(marker);
+            const objectPath = parts[1] || img.split('/storage/v1/object/public/')[1];
+            if (objectPath) {
+              const { error: removeErr } = await supabase.storage.from(String(SUPABASE_BUCKET)).remove([decodeURIComponent(objectPath)]);
+              if (removeErr) console.error('Storage remove error', removeErr);
+            }
+          } catch (e) {
+            console.error('Exception while removing storage object', e);
+          }
+        }
+      }
 
-    await fetchProducts();
+      const { error } = await supabase.from('products').delete().eq('id', id);
+      if (error) {
+        alert("Impossible de supprimer ce produit.");
+        console.error(error);
+        return;
+      }
+
+      await fetchProducts();
+    } catch (err) {
+      console.error('Unexpected error during deleteProduct', err);
+      alert('Erreur lors de la suppression du produit. Voir la console pour plus de détails.');
+    }
   };
 
   // --- REVIEW ACTIONS ---
@@ -351,7 +378,9 @@ const App: React.FC = () => {
           <div className="flex items-center gap-3 sm:gap-4">
             <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="md:hidden p-2 text-gray-600 border border-gray-200 rounded-2xl shadow-sm"><Menu /></button>
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveCategory('Tous')}>
-               <img src={logo} alt={`${BRAND_NAME} logo`} className="w-10 h-10 rounded-full object-cover shadow-lg" />
+               <div className="w-12 h-12 bg-[#0f172a] rounded-full flex items-center justify-center shadow-lg">
+                 <img src={logo} alt={`${BRAND_NAME} logo`} className="w-8 h-8 rounded-full object-contain" />
+               </div>
                <span className="text-xl font-bold tracking-tight hidden sm:block">
                  <span className="text-[#e91e63]">Marifath's</span> <span className="text-[#00bcd4]">Crochet</span>
                </span>
@@ -408,7 +437,9 @@ const App: React.FC = () => {
           <div className="absolute inset-x-0 top-0 bg-white text-gray-900 rounded-b-[2.5rem] shadow-2xl p-6 space-y-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <img src={logo} alt={`${BRAND_NAME} logo`} className="w-12 h-12 rounded-full object-cover" />
+                <div className="w-14 h-14 bg-[#0f172a] rounded-full flex items-center justify-center">
+                  <img src={logo} alt={`${BRAND_NAME} logo`} className="w-10 h-10 rounded-full object-contain" />
+                </div>
                 <div>
                   <p className="text-sm uppercase tracking-[0.3em] text-gray-400">Marifath's</p>
                   <p className="text-xl font-bold text-[#00bcd4]">Crochet</p>
@@ -537,10 +568,11 @@ const App: React.FC = () => {
           {filteredProducts.map(product => (
             <div key={product.id} className="group relative">
               <div className="relative aspect-[4/5] sm:aspect-[3/4] lg:aspect-[3/4] overflow-hidden bg-gray-100 rounded-[2.5rem] shadow-2xl border border-transparent dark:border-white/5">
-                <img 
-                  src={product.image} 
-                  alt={product.name} 
-                  className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                <div
+                  role="img"
+                  aria-label={product.name}
+                  style={{ backgroundImage: `url(${product.image})` }}
+                  className="w-full h-full bg-center bg-cover transition-transform duration-1000 group-hover:scale-110"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 
@@ -584,8 +616,8 @@ const App: React.FC = () => {
                   <div className={`h-[1px] flex-grow ${isDarkMode ? 'bg-white/10' : 'bg-gray-100'}`}></div>
                   <span className="text-[#e91e63] font-black text-xs uppercase tracking-tighter italic">Signature Marifath</span>
                 </div>
-                <h3 className="text-3xl font-serif italic mt-3 tracking-tight">{product.name}</h3>
-                <p className={`mt-3 text-base font-light italic leading-relaxed ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{product.description}</p>
+                <h3 className="text-3xl font-serif italic mt-3 tracking-tight" style={{maxHeight: '3.2rem', overflow: 'hidden'}}>{product.name}</h3>
+                <p className={`mt-3 text-base font-light italic leading-relaxed ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} style={{maxHeight: '4.5rem', overflow: 'hidden'}}>{product.description}</p>
                 <div className="mt-6 flex items-center justify-between">
                    <p className="text-3xl font-black">
                     {product.price.toLocaleString()} <span className="text-sm font-bold text-[#00bcd4] tracking-widest ml-1">FCFA</span>
@@ -650,7 +682,9 @@ const App: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-12 gap-20 mb-32">
             <div className="md:col-span-5 space-y-10">
               <div className="flex items-center gap-5">
-                 <img src={logo} alt={`${BRAND_NAME} logo`} className="w-16 h-16 rounded-full object-cover shadow-2xl" />
+                 <div className="w-18 h-18 bg-[#0f172a] rounded-full flex items-center justify-center shadow-2xl">
+                   <img src={logo} alt={`${BRAND_NAME} logo`} className="w-12 h-12 rounded-full object-contain" />
+                 </div>
                  <h4 className="text-4xl font-serif italic">
                    <span className="text-[#e91e63]">Marifath's</span> <span className="text-[#00bcd4]">Crochet</span>
                  </h4>
@@ -659,8 +693,8 @@ const App: React.FC = () => {
                 Chaque maille est une conception, chaque pièce est confectionnée à la main. Découvrez nos vêtements au crochet, pensés et réalisés pour durer.
               </p>
               <div className="flex gap-6">
-                <a href="https://www.instagram.com/marifathdesigncollection?igsh=aXR1MXNrMGl6YXE1&utm_source=qr" target="_blank" rel="noreferrer" className="w-14 h-14 flex items-center justify-center bg-white/5 rounded-full hover:bg-[#00bcd4] hover:text-black transition-all duration-500"><Instagram className="w-7 h-7" /></a>
-                <a href="https://www.facebook.com/share/1BSSXhqiyZ/?mibextid=wwXIfr" target="_blank" rel="noreferrer" className="w-14 h-14 flex items-center justify-center bg-white/5 rounded-full hover:bg-[#00bcd4] hover:text-black transition-all duration-500"><Facebook className="w-7 h-7" /></a>
+                <a href="https://www.instagram.com/marifathdesigncollection" target="_blank" rel="noopener noreferrer" className="w-14 h-14 flex items-center justify-center bg-white/5 rounded-full hover:bg-[#00bcd4] hover:text-black transition-all duration-500"><Instagram className="w-7 h-7" /></a>
+                <a href="https://www.facebook.com/marifathdesigncollection" target="_blank" rel="noopener noreferrer" className="w-14 h-14 flex items-center justify-center bg-white/5 rounded-full hover:bg-[#00bcd4] hover:text-black transition-all duration-500"><Facebook className="w-7 h-7" /></a>
               </div>
             </div>
 
