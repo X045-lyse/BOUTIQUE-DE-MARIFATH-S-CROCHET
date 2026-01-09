@@ -40,6 +40,7 @@ const mapDbReview = (row: DbReview): Review => ({
 });
 
 const App: React.FC = () => {
+  const SUPABASE_BUCKET = import.meta.env.VITE_SUPABASE_BUCKET;
   // --- THEME STATE ---
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('mc_theme');
@@ -65,6 +66,7 @@ const App: React.FC = () => {
   // Admin Modals
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
   
   // Review Modal
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -89,7 +91,26 @@ const App: React.FC = () => {
       return;
     }
 
-    setProducts((data as DbProduct[] ?? []).map(mapDbProduct));
+    const mapped = (data as DbProduct[] ?? []).map(mapDbProduct);
+
+    // If images are stored as storage paths (not full URLs), try to generate public URLs
+    if (SUPABASE_BUCKET) {
+      const transformed = mapped.map(p => {
+        if (!p.image) return p;
+        const img = String(p.image);
+        if (img.startsWith('http') || img.startsWith('data:')) return p;
+        try {
+          const { data: urlData } = supabase.storage.from(String(SUPABASE_BUCKET)).getPublicUrl(img);
+          return { ...p, image: urlData.publicUrl || img };
+        } catch (err) {
+          console.warn('Could not generate public url for', img, err);
+          return p;
+        }
+      });
+      setProducts(transformed);
+    } else {
+      setProducts(mapped);
+    }
   }, []);
 
   const fetchReviews = useCallback(async () => {
@@ -154,6 +175,23 @@ const App: React.FC = () => {
     window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, '_blank');
   };
 
+  // Dev helper: test Supabase connection
+  const testSupabaseConnection = async () => {
+    try {
+      const { data, error } = await supabase.from('products').select('id').limit(1);
+      if (error) {
+        console.error('Supabase test error', error);
+        alert(`Supabase test error: ${error.message}`);
+      } else {
+        console.log('Supabase test success', data);
+        alert('Supabase test success — la connexion fonctionne.');
+      }
+    } catch (err) {
+      console.error('Supabase test exception', err);
+      alert(`Exception lors du test Supabase: ${String(err)}`);
+    }
+  };
+
   // --- ADMIN ACTIONS ---
   const handleAdminToggle = () => {
     if (isAdmin) {
@@ -183,32 +221,49 @@ const App: React.FC = () => {
       name: formData.get('name'),
       description: formData.get('description'),
       price: Number(formData.get('price')),
-      image: (formData.get('image') as string) || "https://images.unsplash.com/photo-1544441893-675973e31d85?auto=format&fit=crop&q=80&w=800",
+      // Prefer uploaded preview (`image_preview`) over pasted URL (`image`)
+      image: (formData.get('image_preview') as string) || (formData.get('image') as string) || "https://images.unsplash.com/photo-1544441893-675973e31d85?auto=format&fit=crop&q=80&w=800",
       category: formData.get('category'),
     };
 
-    if (editingProduct) {
-      const { error } = await supabase
-        .from('products')
-        .update(payload)
-        .eq('id', editingProduct.id);
-      if (error) {
-        alert("Échec de la mise à jour du produit.");
-        console.error(error);
-        return;
-      }
-    } else {
-      const { error } = await supabase.from('products').insert(payload);
-      if (error) {
-        alert("Échec de l'ajout du produit.");
-        console.error(error);
-        return;
-      }
+    // Basic validation
+    if (!payload.name || !payload.price) {
+      alert('Le nom et le prix sont requis.');
+      return;
     }
 
-    await fetchProducts();
-    setIsProductModalOpen(false);
-    setEditingProduct(null);
+    setIsSavingProduct(true);
+    try {
+      if (editingProduct) {
+        const { error, status } = await supabase
+          .from('products')
+          .update(payload)
+          .eq('id', editingProduct.id);
+        if (error) {
+          alert(`Échec de la mise à jour du produit: ${error.message}`);
+          console.error('Update error', error);
+          setIsSavingProduct(false);
+          return;
+        }
+      } else {
+        const { error } = await supabase.from('products').insert(payload);
+        if (error) {
+          alert(`Échec de l'ajout du produit: ${error.message}`);
+          console.error('Insert error', error);
+          setIsSavingProduct(false);
+          return;
+        }
+      }
+
+      await fetchProducts();
+      setIsProductModalOpen(false);
+      setEditingProduct(null);
+    } catch (err) {
+      console.error('Save product exception', err);
+      alert('Erreur inattendue lors de l\'enregistrement du produit. Consulte la console.');
+    } finally {
+      setIsSavingProduct(false);
+    }
   };
 
   const deleteProduct = async (id: string) => {
@@ -248,16 +303,37 @@ const App: React.FC = () => {
     setIsReviewModalOpen(false);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, targetId: string) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, targetId: string) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const input = document.getElementById(targetId) as HTMLInputElement;
-        if (input) input.value = reader.result as string;
-      };
-      reader.readAsDataURL(file);
+    const input = document.getElementById(targetId) as HTMLInputElement | null;
+    if (!file) return;
+
+    // If a Supabase bucket is configured, upload the file and store its public URL
+    if (SUPABASE_BUCKET) {
+      try {
+        const safeName = file.name.replace(/\s+/g, '_');
+        const filePath = `products/${Date.now()}_${safeName}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage.from(String(SUPABASE_BUCKET)).upload(filePath, file, { cacheControl: '3600', upsert: false });
+
+        if (uploadError) {
+          console.error('Upload error', uploadError);
+        } else {
+          const { data: urlData } = supabase.storage.from(String(SUPABASE_BUCKET)).getPublicUrl(filePath);
+          const publicUrl = urlData?.publicUrl || '';
+          if (input) input.value = publicUrl;
+          return;
+        }
+      } catch (err) {
+        console.error('Upload exception', err);
+      }
     }
+
+    // Fallback: store base64 data URL in the hidden input
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (input) input.value = reader.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   const categories = ['Tous', 'Hauts', 'Robes', 'Accessoires', 'Ensembles'];
@@ -317,6 +393,9 @@ const App: React.FC = () => {
                 </span>
               )}
             </button>
+            {import.meta.env.DEV && (
+              <button onClick={testSupabaseConnection} className="ml-2 p-2 text-xs bg-yellow-300 rounded-md">Test Supabase</button>
+            )}
           </div>
         </div>
       </nav>
@@ -380,10 +459,10 @@ const App: React.FC = () => {
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex items-center justify-center px-4">
             <div className="text-center max-w-4xl px-2">
-              <h2 className="text-[#00bcd4] text-xs sm:text-sm font-bold uppercase tracking-[0.5em] mb-5 drop-shadow-lg">Le Savoir-Faire Marifath</h2>
-              <h1 className="text-4xl sm:text-6xl lg:text-8xl text-white font-serif mb-6 sm:mb-8 italic drop-shadow-2xl leading-tight">Univers Marifath's Crochet</h1>
+              <h2 className="text-[#00bcd4] text-xs sm:text-sm font-bold uppercase tracking-[0.5em] mb-5 drop-shadow-lg">Atelier & Création</h2>
+              <h1 className="text-4xl sm:text-6xl lg:text-8xl text-white font-serif mb-6 sm:mb-8 italic drop-shadow-2xl leading-tight">Créations au Crochet</h1>
               <p className="text-white/90 text-base sm:text-lg lg:text-2xl mb-8 sm:mb-12 font-light max-w-3xl mx-auto leading-relaxed px-1">
-                Quand le <span className="text-[#e91e63] font-bold italic">Rose Aurore</span> s'entrelace avec le bleu du ciel infini. Découvrez l'art du crochet réinventé.
+                Design et confection de vêtements en crochet, pièces uniques réalisées à la main par Marifath. Découvrez nos techniques, matériaux et finitions.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center">
                 <button 
@@ -432,8 +511,8 @@ const App: React.FC = () => {
       <main id="shop" className="max-w-7xl mx-auto px-4 sm:px-6 py-16 sm:py-24 flex-grow">
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 sm:mb-16 gap-6 sm:gap-8">
           <div className="space-y-2 sm:space-y-3">
-            <span className="text-[#e91e63] font-bold tracking-[0.4em] uppercase text-[10px] sm:text-xs">Horizon de Coton</span>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif italic leading-tight">Tissages de l'Océan</h2>
+            <span className="text-[#e91e63] font-bold tracking-[0.4em] uppercase text-[10px] sm:text-xs">Collection Atelier</span>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif italic leading-tight">Designs et Conceptions</h2>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide w-full md:w-auto">
             {categories.map(cat => (
@@ -575,7 +654,7 @@ const App: React.FC = () => {
                  </h4>
               </div>
               <p className="text-gray-400 font-light leading-relaxed text-xl max-w-md">
-                Chaque maille raconte une histoire, chaque couleur un voyage. L'artisanat sénégalais au service de votre élégance signée Marifath's Crochet.
+                Chaque maille est une conception, chaque pièce est confectionnée à la main. Découvrez nos vêtements au crochet, pensés et réalisés pour durer.
               </p>
               <div className="flex gap-6">
                 <a href="#" className="w-14 h-14 flex items-center justify-center bg-white/5 rounded-full hover:bg-[#00bcd4] hover:text-black transition-all duration-500"><Instagram className="w-7 h-7" /></a>
@@ -688,7 +767,7 @@ const App: React.FC = () => {
       {/* MODAL: ADMIN PRODUCT CRUD */}
       {isProductModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md">
-          <div className={`w-full max-w-3xl rounded-[3rem] overflow-hidden shadow-2xl animate-scaleUp relative ${isDarkMode ? 'bg-[#111] text-white' : 'bg-white text-gray-900'}`}>
+          <div className={`w-full max-w-3xl rounded-[3rem] overflow-hidden shadow-2xl animate-scaleUp relative max-h-[80vh] ${isDarkMode ? 'bg-[#111] text-white' : 'bg-white text-gray-900'}`}>
             <div className="absolute inset-0 opacity-20 pointer-events-none">
               <div className="w-[500px] h-[500px] bg-gradient-to-br from-[#00bcd4] via-transparent to-[#e91e63] blur-3xl absolute -top-40 -right-20" />
               <div className="w-[400px] h-[400px] bg-gradient-to-tr from-[#e91e63] via-transparent to-[#00bcd4] blur-[120px] absolute -bottom-40 -left-10" />
@@ -703,7 +782,7 @@ const App: React.FC = () => {
                   <X />
                 </button>
               </div>
-              <form onSubmit={handleSaveProduct} className="px-6 sm:px-10 py-6 space-y-8">
+              <form onSubmit={handleSaveProduct} className="px-6 sm:px-10 py-6 space-y-8 overflow-y-auto max-h-[65vh]">
                 <input type="hidden" name="image_preview" id="prod_img_val" defaultValue={editingProduct?.image || ''} />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div className="space-y-2">
@@ -740,10 +819,11 @@ const App: React.FC = () => {
                   <div className="space-y-2">
                     <label className="text-[0.65rem] font-black uppercase tracking-[0.4em] text-gray-400">Image</label>
                     <div className="space-y-3">
-                      <div className={`flex items-center gap-4 p-4 border-2 border-dashed rounded-3xl cursor-pointer transition-all ${isDarkMode ? 'border-white/10 hover:border-[#00bcd4]' : 'border-gray-200 hover:border-[#00bcd4]'}`}>
+                      <div className={`flex items-center gap-4 p-4 border-2 border-dashed rounded-3xl transition-all ${isDarkMode ? 'border-white/10' : 'border-gray-200'}`}>
                         <Camera className="text-[#00bcd4] w-7 h-7" />
                         <span className="text-sm text-gray-500">Téléverser depuis votre appareil</span>
-                        <input type="file" onChange={(e) => handleImageUpload(e, 'prod_img_val')} accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" />
+                        <input id="prod_img_input" type="file" onChange={(e) => handleImageUpload(e, 'prod_img_val')} accept="image/*" className="sr-only" />
+                        <label htmlFor="prod_img_input" className="ml-auto bg-[#00bcd4] text-black px-4 py-2 rounded-xl font-semibold cursor-pointer hover:opacity-90">Choisir une image</label>
                       </div>
                       <input
                         name="image"
@@ -777,9 +857,10 @@ const App: React.FC = () => {
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 bg-gradient-to-r from-[#00bcd4] to-[#0097a7] text-black py-4 rounded-2xl font-black text-sm uppercase tracking-[0.35em] shadow-2xl shadow-cyan-900/30 hover:scale-105 transition-transform"
+                    disabled={isSavingProduct}
+                    className={`flex-1 ${isSavingProduct ? 'opacity-60 cursor-not-allowed' : 'hover:scale-105'} bg-gradient-to-r from-[#00bcd4] to-[#0097a7] text-black py-4 rounded-2xl font-black text-sm uppercase tracking-[0.35em] shadow-2xl shadow-cyan-900/30 transition-transform`}
                   >
-                    Enregistrer dans la boutique
+                    {isSavingProduct ? 'Enregistrement...' : "Enregistrer dans la boutique"}
                   </button>
                 </div>
               </form>
@@ -791,12 +872,12 @@ const App: React.FC = () => {
       {/* MODAL: REVIEW FORM */}
       {isReviewModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md">
-          <div className={`w-full max-w-xl rounded-[3rem] overflow-hidden shadow-2xl animate-scaleUp ${isDarkMode ? 'bg-[#1a1a1a] text-white' : 'bg-white text-gray-900'}`}>
+          <div className={`w-full max-w-xl rounded-[3rem] overflow-hidden shadow-2xl animate-scaleUp max-h-[80vh] ${isDarkMode ? 'bg-[#1a1a1a] text-white' : 'bg-white text-gray-900'}`}>
             <div className={`p-10 border-b flex items-center justify-between ${isDarkMode ? 'bg-[#222] border-white/5' : 'bg-gray-50 border-gray-100'}`}>
               <h2 className="text-3xl font-serif italic">Votre Récit Marifath</h2>
               <button onClick={() => setIsReviewModalOpen(false)} className="p-3 hover:bg-white/10 rounded-full transition-colors"><X /></button>
             </div>
-            <form onSubmit={handleAddReview} className="p-10 space-y-8">
+            <form onSubmit={handleAddReview} className="p-10 space-y-8 overflow-y-auto max-h-[65vh]">
               <input type="hidden" name="image_preview" id="rev_img_val" />
               <div className="grid grid-cols-2 gap-6">
                 <input name="firstName" required placeholder="Prénom" className={`w-full border-none rounded-2xl p-5 focus:ring-2 focus:ring-[#e91e63] text-lg ${isDarkMode ? 'bg-[#252525]' : 'bg-gray-100'}`} />
@@ -815,10 +896,11 @@ const App: React.FC = () => {
               <textarea name="comment" required placeholder="Partagez vos impressions sur la pièce portée..." className={`w-full border-none rounded-2xl p-5 focus:ring-2 focus:ring-[#e91e63] italic text-lg ${isDarkMode ? 'bg-[#252525]' : 'bg-gray-100'}`} rows={4}></textarea>
               <div className="space-y-3">
                 <label className="text-xs font-black text-gray-400 block uppercase tracking-[0.3em]">Instantané (Optionnel)</label>
-                <div className={`flex items-center gap-5 p-6 border-2 border-dashed rounded-3xl cursor-pointer hover:border-[#e91e63] transition-all relative ${isDarkMode ? 'border-white/10 hover:bg-[#252525]' : 'border-gray-200 hover:bg-gray-50'}`}>
+                <div className={`flex items-center gap-5 p-6 border-2 border-dashed rounded-3xl transition-all ${isDarkMode ? 'border-white/10' : 'border-gray-200'}`}>
                   <Camera className="text-[#e91e63] w-8 h-8" />
                   <span className="text-sm text-gray-500 font-medium">Capturer la pièce portée</span>
-                  <input type="file" onChange={(e) => handleImageUpload(e, 'rev_img_val')} accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" />
+                  <input id="rev_img_input" type="file" onChange={(e) => handleImageUpload(e, 'rev_img_val')} accept="image/*" className="sr-only" />
+                  <label htmlFor="rev_img_input" className="ml-auto px-4 py-2 bg-[#e91e63] text-white rounded-xl font-semibold cursor-pointer hover:opacity-90">Ajouter une photo</label>
                 </div>
               </div>
               <button type="submit" className="w-full bg-[#e91e63] text-white py-6 rounded-2xl font-black shadow-2xl shadow-pink-900/40 active:scale-95 transition-all uppercase tracking-[0.3em] text-sm">
