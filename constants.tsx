@@ -1,18 +1,18 @@
 
 import { Product } from './types';
 
-export const WHATSAPP_NUMBER = "229"; // Remplacez par votre numéro réel
+export const WHATSAPP_NUMBER = "2290144167365"; // Remplacez par votre numéro réel
 export const BRAND_NAME = "Marifath's Crochet";
 export const ADMIN_PASSWORD = "crochet"; // Mot de passe par défaut
 
 export const PRODUCTS: Product[] = [
   {
     id: 1,
-    name: "Haut Bikini Azur Nacré",
+    name: "Haut Bikini Signature Marifath",
     description: "Un haut court aux reflets de l'océan, tissé avec un fil de coton premium pour une douceur absolue.",
     price: 18000,
     image: "https://images.unsplash.com/photo-1516762689617-e1cffcef479d?auto=format&fit=crop&q=80&w=800",
-    category: 'Hauts'
+    category: 'Hauts'    //mlyseà445GO
   },
   {
     id: 2,
@@ -24,8 +24,8 @@ export const PRODUCTS: Product[] = [
   },
   {
     id: 3,
-    name: "Sac Cabas Nuit d'Azur",
-    description: "L'alliance du noir profond et de l'azur vibrant dans un sac robuste fait pour vos journées ensoleillées.",
+    name: "Sac Cabas Nuit Marifath",
+    description: "L'alliance du noir profond et des nuances iconiques Marifath dans un sac robuste fait pour vos journées ensoleillées.",
     price: 25000,
     image: "https://images.unsplash.com/photo-1590739225287-bd31519780c3?auto=format&fit=crop&q=80&w=800",
     category: 'Accessoires'
@@ -40,8 +40,8 @@ export const PRODUCTS: Product[] = [
   },
   {
     id: 5,
-    name: "Top Dos Nu Azur Éclat",
-    description: "La pureté du bleu azur dans une coupe moderne à lacets, idéale pour sublimer votre bronzage.",
+    name: "Top Dos Nu Signature Marifath",
+    description: "La signature Marifath dans une coupe moderne à lacets, idéale pour sublimer votre bronzage.",
     price: 15000,
     image: "https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?auto=format&fit=crop&q=80&w=800",
     category: 'Hauts'

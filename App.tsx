@@ -69,6 +69,14 @@ const App: React.FC = () => {
   // Review Modal
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
 
+  // --- EFFECTS ---
+  useEffect(() => {
+    document.body.style.overflow = isMenuOpen ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isMenuOpen]);
+
   // --- DATA FETCH ---
   const fetchProducts = useCallback(async () => {
     const { data, error } = await supabase
@@ -261,9 +269,9 @@ const App: React.FC = () => {
     <div className={`min-h-screen flex flex-col transition-colors duration-500 ${isDarkMode ? 'bg-[#121212] text-white' : 'bg-[#fdfdfd] text-gray-900'} selection:bg-[#00bcd4]/30`}>
       {/* Navigation */}
       <nav className={`fixed w-full z-40 transition-colors duration-500 border-b shadow-sm ${isDarkMode ? 'bg-[#1a1a1a]/95 border-white/5' : 'bg-white/95 border-gray-100'} backdrop-blur-md`}>
-        <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="md:hidden p-2 text-gray-600"><Menu /></button>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="md:hidden p-2 text-gray-600 border border-gray-200 rounded-2xl shadow-sm"><Menu /></button>
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveCategory('Tous')}>
                <div className="w-10 h-10 bg-[#e91e63] rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-pink-200">M</div>
                <span className="text-xl font-bold tracking-tight hidden sm:block">
@@ -272,7 +280,7 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-8 text-xs font-bold uppercase tracking-widest text-gray-400">
+          <div className="hidden md:flex items-center gap-6 lg:gap-8 text-[11px] lg:text-xs font-bold uppercase tracking-[0.3em] text-gray-400">
             {categories.map(cat => (
               <button 
                 key={cat}
@@ -313,31 +321,80 @@ const App: React.FC = () => {
         </div>
       </nav>
 
+      {/* Mobile Menu */}
+      {isMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm">
+          <div className="absolute inset-x-0 top-0 bg-white text-gray-900 rounded-b-[2.5rem] shadow-2xl p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-[#e91e63] rounded-full flex items-center justify-center text-white font-bold text-2xl">M</div>
+                <div>
+                  <p className="text-sm uppercase tracking-[0.3em] text-gray-400">Marifath's</p>
+                  <p className="text-xl font-bold text-[#00bcd4]">Crochet</p>
+                </div>
+              </div>
+              <button onClick={() => setIsMenuOpen(false)} className="p-2 text-gray-500 hover:text-black">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="flex flex-col gap-4 text-lg font-semibold">
+              {categories.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => {
+                    setActiveCategory(cat);
+                    setIsMenuOpen(false);
+                    document.getElementById('shop')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className={`py-3 rounded-2xl border ${activeCategory === cat ? 'bg-[#00bcd4]/10 border-[#00bcd4] text-[#00bcd4]' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={() => { setIsMenuOpen(false); handleAdminToggle(); }}
+                className="w-full bg-[#00bcd4] text-black py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg"
+              >
+                Portail Admin
+              </button>
+              <button 
+                onClick={() => { setIsMenuOpen(false); setIsCartOpen(true); }}
+                className="w-full border border-gray-200 py-4 rounded-2xl font-black uppercase tracking-widest"
+              >
+                Voir le Panier
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Hero Section */}
-      <section className="pt-20">
-        <div className="relative h-[85vh] w-full overflow-hidden">
+      <section className="pt-16 sm:pt-20">
+        <div className="relative min-h-[70vh] sm:min-h-[80vh] w-full overflow-hidden">
           <img 
             src="https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?auto=format&fit=crop&q=80&w=1920" 
             alt="Crochet Hero" 
             className="absolute inset-0 w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex items-center justify-center px-4">
-            <div className="text-center max-w-4xl">
-              <h2 className="text-[#00bcd4] text-sm font-bold uppercase tracking-[0.6em] mb-6 drop-shadow-lg">Le Savoir-Faire Marifath</h2>
-              <h1 className="text-6xl md:text-9xl text-white font-serif mb-8 italic drop-shadow-2xl leading-tight">Univers Marifath's Crochet</h1>
-              <p className="text-white/90 text-xl md:text-2xl mb-12 font-light max-w-3xl mx-auto leading-relaxed">
+            <div className="text-center max-w-4xl px-2">
+              <h2 className="text-[#00bcd4] text-xs sm:text-sm font-bold uppercase tracking-[0.5em] mb-5 drop-shadow-lg">Le Savoir-Faire Marifath</h2>
+              <h1 className="text-4xl sm:text-6xl lg:text-8xl text-white font-serif mb-6 sm:mb-8 italic drop-shadow-2xl leading-tight">Univers Marifath's Crochet</h1>
+              <p className="text-white/90 text-base sm:text-lg lg:text-2xl mb-8 sm:mb-12 font-light max-w-3xl mx-auto leading-relaxed px-1">
                 Quand le <span className="text-[#e91e63] font-bold italic">Rose Aurore</span> s'entrelace avec le bleu du ciel infini. Découvrez l'art du crochet réinventé.
               </p>
-              <div className="flex flex-col sm:flex-row gap-6 justify-center">
+              <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center">
                 <button 
                   onClick={() => document.getElementById('shop')?.scrollIntoView({ behavior: 'smooth' })}
-                  className="bg-[#00bcd4] hover:bg-[#0097a7] text-white px-12 py-5 rounded-full font-bold transition-all flex items-center justify-center gap-3 shadow-2xl shadow-cyan-900/50 scale-105"
+                  className="bg-[#00bcd4] hover:bg-[#0097a7] text-white px-10 sm:px-12 py-4 sm:py-5 rounded-full font-bold transition-all flex items-center justify-center gap-3 shadow-2xl shadow-cyan-900/50 w-full sm:w-auto"
                 >
                   Découvrir la Collection <ArrowRight className="w-6 h-6" />
                 </button>
                 <button 
                    onClick={() => setIsReviewModalOpen(true)}
-                   className="bg-white/10 backdrop-blur-md border border-white/30 text-white hover:bg-white hover:text-black px-12 py-5 rounded-full font-bold transition-all"
+                   className="bg-white/10 backdrop-blur-md border border-white/30 text-white hover:bg-white hover:text-black px-10 sm:px-12 py-4 sm:py-5 rounded-full font-bold transition-all w-full sm:w-auto"
                 >
                    Témoignages
                 </button>
@@ -372,18 +429,18 @@ const App: React.FC = () => {
       )}
 
       {/* Main Content */}
-      <main id="shop" className="max-w-7xl mx-auto px-4 py-28 flex-grow">
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-20 gap-8">
-          <div className="space-y-3">
-            <span className="text-[#e91e63] font-bold tracking-[0.3em] uppercase text-xs">Horizon de Coton</span>
-            <h2 className="text-5xl md:text-6xl font-serif italic">Tissages de l'Océan</h2>
+      <main id="shop" className="max-w-7xl mx-auto px-4 sm:px-6 py-16 sm:py-24 flex-grow">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 sm:mb-16 gap-6 sm:gap-8">
+          <div className="space-y-2 sm:space-y-3">
+            <span className="text-[#e91e63] font-bold tracking-[0.4em] uppercase text-[10px] sm:text-xs">Horizon de Coton</span>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif italic leading-tight">Tissages de l'Océan</h2>
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide">
+          <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide w-full md:w-auto">
             {categories.map(cat => (
               <button 
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
-                className={`px-10 py-3 rounded-full whitespace-nowrap text-xs font-bold uppercase tracking-widest transition-all shadow-sm ${
+                className={`px-6 sm:px-8 py-3 rounded-full whitespace-nowrap text-[11px] sm:text-xs font-bold uppercase tracking-widest transition-all shadow-sm ${
                   activeCategory === cat 
                   ? (isDarkMode ? 'bg-[#00bcd4] text-black' : 'bg-black text-[#00bcd4]') 
                   : (isDarkMode ? 'bg-[#1a1a1a] text-gray-500 border border-white/5' : 'bg-white text-gray-400 border border-gray-100')
@@ -630,49 +687,103 @@ const App: React.FC = () => {
 
       {/* MODAL: ADMIN PRODUCT CRUD */}
       {isProductModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
-          <div className={`w-full max-w-2xl rounded-[3rem] overflow-hidden shadow-2xl animate-scaleUp ${isDarkMode ? 'bg-[#1a1a1a] text-white' : 'bg-white text-gray-900'}`}>
-            <div className={`p-10 border-b flex items-center justify-between ${isDarkMode ? 'bg-[#222] border-white/5' : 'bg-gray-50 border-gray-100'}`}>
-              <h2 className="text-3xl font-bold tracking-tight">{editingProduct ? "Modifier la Pièce" : "Nouvelle Création"}</h2>
-              <button onClick={() => setIsProductModalOpen(false)} className="p-3 hover:bg-white/10 rounded-full transition-colors"><X /></button>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md">
+          <div className={`w-full max-w-3xl rounded-[3rem] overflow-hidden shadow-2xl animate-scaleUp relative ${isDarkMode ? 'bg-[#111] text-white' : 'bg-white text-gray-900'}`}>
+            <div className="absolute inset-0 opacity-20 pointer-events-none">
+              <div className="w-[500px] h-[500px] bg-gradient-to-br from-[#00bcd4] via-transparent to-[#e91e63] blur-3xl absolute -top-40 -right-20" />
+              <div className="w-[400px] h-[400px] bg-gradient-to-tr from-[#e91e63] via-transparent to-[#00bcd4] blur-[120px] absolute -bottom-40 -left-10" />
             </div>
-            <form onSubmit={handleSaveProduct} className="p-10 space-y-6">
-              <input type="hidden" name="image_preview" id="prod_img_val" defaultValue={editingProduct?.image || ''} />
-              <div className="grid grid-cols-2 gap-6">
-                <div className="col-span-2">
-                  <label className="text-xs font-black uppercase text-gray-400 block mb-2 tracking-widest">Nom de la pièce</label>
-                  <input name="name" defaultValue={editingProduct?.name} required className={`w-full border-none rounded-2xl p-4 focus:ring-2 focus:ring-[#00bcd4] text-lg ${isDarkMode ? 'bg-[#252525]' : 'bg-gray-50'}`} placeholder="ex: Robe Signature Marifath" />
-                </div>
+            <div className="relative">
+              <div className={`px-6 sm:px-10 py-6 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 ${isDarkMode ? 'bg-[#1a1a1a]/70 border-white/10' : 'bg-white border-gray-100'}`}>
                 <div>
-                  <label className="text-xs font-black uppercase text-gray-400 block mb-2 tracking-widest">Investissement (FCFA)</label>
-                  <input name="price" type="number" defaultValue={editingProduct?.price} required className={`w-full border-none rounded-2xl p-4 focus:ring-2 focus:ring-[#00bcd4] ${isDarkMode ? 'bg-[#252525]' : 'bg-gray-50'}`} />
+                  <p className="text-xs uppercase tracking-[0.7em] text-gray-400">Atelier Marifath's Crochet</p>
+                  <h2 className="text-2xl sm:text-3xl font-serif italic">{editingProduct ? "Retoucher la création" : "Nouvelle pièce signature"}</h2>
                 </div>
-                <div>
-                  <label className="text-xs font-black uppercase text-gray-400 block mb-2 tracking-widest">Univers</label>
-                  <select name="category" defaultValue={editingProduct?.category || 'Hauts'} className={`w-full border-none rounded-2xl p-4 focus:ring-2 focus:ring-[#00bcd4] ${isDarkMode ? 'bg-[#252525]' : 'bg-gray-50'}`}>
-                    {categories.slice(1).map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
+                <button onClick={() => setIsProductModalOpen(false)} className="self-start sm:self-auto p-3 rounded-full border border-gray-200/30 hover:border-transparent hover:bg-white/10 transition-colors">
+                  <X />
+                </button>
               </div>
-              <div>
-                <label className="text-xs font-black uppercase text-gray-400 block mb-2 tracking-widest">Récit de la création</label>
-                <textarea name="description" defaultValue={editingProduct?.description} required className={`w-full border-none rounded-2xl p-4 focus:ring-2 focus:ring-[#00bcd4] italic ${isDarkMode ? 'bg-[#252525]' : 'bg-gray-50'}`} rows={3} placeholder="Matières, inspiration, entretien..."></textarea>
-              </div>
-              <div>
-                <label className="text-xs font-black uppercase text-gray-400 block mb-2 tracking-widest">Viseul de l'œuvre</label>
-                <div className="flex flex-col gap-4">
-                  <div className={`flex items-center gap-5 p-6 border-2 border-dashed rounded-3xl cursor-pointer hover:border-[#00bcd4] transition-all relative ${isDarkMode ? 'border-white/10 hover:bg-[#252525]' : 'border-gray-200 hover:bg-gray-50'}`}>
-                    <Camera className="text-[#00bcd4] w-8 h-8" />
-                    <span className="text-sm text-gray-500 font-medium">Importer une photographie</span>
-                    <input type="file" onChange={(e) => handleImageUpload(e, 'prod_img_val')} accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" />
+              <form onSubmit={handleSaveProduct} className="px-6 sm:px-10 py-6 space-y-8">
+                <input type="hidden" name="image_preview" id="prod_img_val" defaultValue={editingProduct?.image || ''} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <label className="text-[0.65rem] font-black uppercase tracking-[0.4em] text-gray-400">Nom de la création</label>
+                    <input
+                      name="name"
+                      defaultValue={editingProduct?.name}
+                      required
+                      className={`w-full rounded-2xl p-4 focus:ring-2 focus:ring-[#00bcd4] text-base ${isDarkMode ? 'bg-[#1f1f1f] border border-white/10' : 'bg-gray-50 border border-gray-100'}`}
+                      placeholder="Ex: Robe Cascade Dakar"
+                    />
                   </div>
-                  <input name="image" defaultValue={editingProduct?.image} placeholder="Ou lien URL de l'image" className={`w-full border-none rounded-2xl p-4 text-xs ${isDarkMode ? 'bg-[#252525]' : 'bg-gray-50'}`} />
+                  <div className="space-y-2">
+                    <label className="text-[0.65rem] font-black uppercase tracking-[0.4em] text-gray-400">Prix atelier (FCFA)</label>
+                    <input
+                      name="price"
+                      type="number"
+                      defaultValue={editingProduct?.price}
+                      required
+                      className={`w-full rounded-2xl p-4 focus:ring-2 focus:ring-[#00bcd4] text-base ${isDarkMode ? 'bg-[#1f1f1f] border border-white/10' : 'bg-gray-50 border border-gray-100'}`}
+                      placeholder="Ex: 45000"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[0.65rem] font-black uppercase tracking-[0.4em] text-gray-400">Univers</label>
+                    <select
+                      name="category"
+                      defaultValue={editingProduct?.category || 'Hauts'}
+                      className={`w-full rounded-2xl p-4 focus:ring-2 focus:ring-[#00bcd4] text-base ${isDarkMode ? 'bg-[#1f1f1f] border border-white/10' : 'bg-gray-50 border border-gray-100'}`}
+                    >
+                      {categories.slice(1).map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[0.65rem] font-black uppercase tracking-[0.4em] text-gray-400">Image</label>
+                    <div className="space-y-3">
+                      <div className={`flex items-center gap-4 p-4 border-2 border-dashed rounded-3xl cursor-pointer transition-all ${isDarkMode ? 'border-white/10 hover:border-[#00bcd4]' : 'border-gray-200 hover:border-[#00bcd4]'}`}>
+                        <Camera className="text-[#00bcd4] w-7 h-7" />
+                        <span className="text-sm text-gray-500">Téléverser depuis votre appareil</span>
+                        <input type="file" onChange={(e) => handleImageUpload(e, 'prod_img_val')} accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" />
+                      </div>
+                      <input
+                        name="image"
+                        defaultValue={editingProduct?.image}
+                        placeholder="Ou collez un lien d'image"
+                        className={`w-full rounded-2xl p-4 text-sm focus:ring-2 focus:ring-[#00bcd4] ${isDarkMode ? 'bg-[#1f1f1f] border border-white/10' : 'bg-gray-50 border border-gray-100'}`}
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <button type="submit" className="w-full bg-[#00bcd4] text-black py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl shadow-cyan-900/30 hover:scale-[1.02] transition-all mt-6">
-                Inscrire dans la Collection
-              </button>
-            </form>
+
+                <div className="space-y-2">
+                  <label className="text-[0.65rem] font-black uppercase tracking-[0.4em] text-gray-400">Description boutique</label>
+                  <textarea
+                    name="description"
+                    defaultValue={editingProduct?.description}
+                    required
+                    className={`w-full rounded-3xl p-5 focus:ring-2 focus:ring-[#00bcd4] text-base leading-relaxed ${isDarkMode ? 'bg-[#1f1f1f] border border-white/10' : 'bg-gray-50 border border-gray-100'}`}
+                    rows={4}
+                    placeholder="Parlez des matières, du tombé, de l'énergie Marifath's Crochet..."
+                  ></textarea>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsProductModalOpen(false)}
+                    className="flex-1 border border-gray-200/40 py-4 rounded-2xl font-semibold uppercase tracking-[0.3em] hover:bg-gray-50/20 transition-all"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 bg-gradient-to-r from-[#00bcd4] to-[#0097a7] text-black py-4 rounded-2xl font-black text-sm uppercase tracking-[0.35em] shadow-2xl shadow-cyan-900/30 hover:scale-105 transition-transform"
+                  >
+                    Enregistrer dans la boutique
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
