@@ -1,11 +1,43 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   ShoppingBag, Menu, X, Instagram, Facebook, MessageCircle, 
   ArrowRight, Heart, Plus, Edit2, Trash2, Star, Camera, Settings, Lock, Eye, EyeOff, LogOut, Sun, Moon 
 } from 'lucide-react';
-import { PRODUCTS as INITIAL_PRODUCTS, WHATSAPP_NUMBER, BRAND_NAME, ADMIN_PASSWORD } from './constants';
+import { WHATSAPP_NUMBER, BRAND_NAME, ADMIN_PASSWORD } from './constants';
 import { Product, CartItem, Review } from './types';
+import { supabase } from './supabaseClient';
+
+type DbProduct = Product & { created_at?: string | null };
+type DbReview = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  comment: string;
+  rating: number;
+  image?: string | null;
+  date: string;
+  created_at?: string | null;
+};
+
+const mapDbProduct = (row: DbProduct): Product => ({
+  id: row.id,
+  name: row.name,
+  description: row.description,
+  price: row.price,
+  image: row.image,
+  category: row.category as Product['category'],
+});
+
+const mapDbReview = (row: DbReview): Review => ({
+  id: row.id,
+  firstName: row.first_name,
+  lastName: row.last_name,
+  comment: row.comment,
+  rating: row.rating,
+  image: row.image ?? undefined,
+  date: row.date,
+});
 
 const App: React.FC = () => {
   // --- THEME STATE ---
@@ -15,18 +47,8 @@ const App: React.FC = () => {
   });
 
   // --- STATE ---
-  const [products, setProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem('mc_products');
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
-  });
-
-  const [reviews, setReviews] = useState<Review[]>(() => {
-    const saved = localStorage.getItem('mc_reviews');
-    return saved ? JSON.parse(saved) : [
-      { id: 1, firstName: "Awa", lastName: "Diop", comment: "La robe azur est une pure merveille. On sent l'amour dans chaque maille !", rating: 5, date: "2024-03-10" },
-      { id: 2, firstName: "Fatou", lastName: "Ndiaye", comment: "Le contraste entre le noir et le rose est sublime. Qualité exceptionnelle.", rating: 5, date: "2024-03-08" }
-    ];
-  });
+  const [products, setProducts] = useState<Product[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -47,15 +69,41 @@ const App: React.FC = () => {
   // Review Modal
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
 
-  // --- PERSISTENCE ---
-  useEffect(() => {
-    localStorage.setItem('mc_products', JSON.stringify(products));
-  }, [products]);
+  // --- DATA FETCH ---
+  const fetchProducts = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Erreur chargement produits', error);
+      return;
+    }
+
+    setProducts((data as DbProduct[] ?? []).map(mapDbProduct));
+  }, []);
+
+  const fetchReviews = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('reviews')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Erreur chargement avis', error);
+      return;
+    }
+
+    setReviews((data as DbReview[] ?? []).map(mapDbReview));
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem('mc_reviews', JSON.stringify(reviews));
-  }, [reviews]);
+    fetchProducts();
+    fetchReviews();
+  }, [fetchProducts, fetchReviews]);
 
+  // --- PERSISTENCE (theme only) ---
   useEffect(() => {
     localStorage.setItem('mc_theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
@@ -74,11 +122,11 @@ const App: React.FC = () => {
     setIsCartOpen(true);
   };
 
-  const removeFromCart = (id: number) => {
+  const removeFromCart = (id: string) => {
     setCart(prev => prev.filter(item => item.id !== id));
   };
 
-  const updateQuantity = (id: number, delta: number) => {
+  const updateQuantity = (id: string, delta: number) => {
     setCart(prev => prev.map(item => {
       if (item.id === id) {
         const newQty = Math.max(1, item.quantity + delta);
@@ -120,47 +168,75 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSaveProduct = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveProduct = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const newProduct: any = {
-      id: editingProduct ? editingProduct.id : Date.now(),
+    const payload = {
       name: formData.get('name'),
       description: formData.get('description'),
       price: Number(formData.get('price')),
-      image: formData.get('image') || "https://images.unsplash.com/photo-1544441893-675973e31d85?auto=format&fit=crop&q=80&w=800",
+      image: (formData.get('image') as string) || "https://images.unsplash.com/photo-1544441893-675973e31d85?auto=format&fit=crop&q=80&w=800",
       category: formData.get('category'),
     };
 
     if (editingProduct) {
-      setProducts(prev => prev.map(p => p.id === editingProduct.id ? newProduct : p));
+      const { error } = await supabase
+        .from('products')
+        .update(payload)
+        .eq('id', editingProduct.id);
+      if (error) {
+        alert("Échec de la mise à jour du produit.");
+        console.error(error);
+        return;
+      }
     } else {
-      setProducts(prev => [newProduct, ...prev]);
+      const { error } = await supabase.from('products').insert(payload);
+      if (error) {
+        alert("Échec de l'ajout du produit.");
+        console.error(error);
+        return;
+      }
     }
+
+    await fetchProducts();
     setIsProductModalOpen(false);
     setEditingProduct(null);
   };
 
-  const deleteProduct = (id: number) => {
-    if (confirm("Voulez-vous vraiment supprimer ce produit ?")) {
-      setProducts(prev => prev.filter(p => p.id !== id));
+  const deleteProduct = async (id: string) => {
+    if (!confirm("Voulez-vous vraiment supprimer ce produit ?")) return;
+
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (error) {
+      alert("Impossible de supprimer ce produit.");
+      console.error(error);
+      return;
     }
+
+    await fetchProducts();
   };
 
   // --- REVIEW ACTIONS ---
-  const handleAddReview = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddReview = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const newReview: Review = {
-      id: Date.now(),
-      firstName: formData.get('firstName') as string,
-      lastName: formData.get('lastName') as string,
-      comment: formData.get('comment') as string,
+    const payload = {
+      first_name: formData.get('firstName'),
+      last_name: formData.get('lastName'),
+      comment: formData.get('comment'),
       rating: Number(formData.get('rating')),
-      image: formData.get('image_preview') as string || undefined,
+      image: formData.get('image_preview'),
       date: new Date().toISOString().split('T')[0],
     };
-    setReviews(prev => [newReview, ...prev]);
+
+    const { error } = await supabase.from('reviews').insert(payload);
+    if (error) {
+      alert("Impossible d'ajouter l'avis.");
+      console.error(error);
+      return;
+    }
+
+    await fetchReviews();
     setIsReviewModalOpen(false);
   };
 
@@ -248,7 +324,7 @@ const App: React.FC = () => {
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex items-center justify-center px-4">
             <div className="text-center max-w-4xl">
               <h2 className="text-[#00bcd4] text-sm font-bold uppercase tracking-[0.6em] mb-6 drop-shadow-lg">Le Savoir-Faire Marifath</h2>
-              <h1 className="text-6xl md:text-9xl text-white font-serif mb-8 italic drop-shadow-2xl leading-tight">Reflets d'Azur</h1>
+              <h1 className="text-6xl md:text-9xl text-white font-serif mb-8 italic drop-shadow-2xl leading-tight">Univers Marifath's Crochet</h1>
               <p className="text-white/90 text-xl md:text-2xl mb-12 font-light max-w-3xl mx-auto leading-relaxed">
                 Quand le <span className="text-[#e91e63] font-bold italic">Rose Aurore</span> s'entrelace avec le bleu du ciel infini. Découvrez l'art du crochet réinventé.
               </p>
@@ -282,7 +358,7 @@ const App: React.FC = () => {
               </div>
               <div>
                 <h2 className={`text-2xl font-bold uppercase tracking-tight ${isDarkMode ? 'text-[#00bcd4]' : 'text-gray-900'}`}>Édition de l'Atelier</h2>
-                <p className="text-gray-500 text-sm">Gérez vos créations Azur & Rose</p>
+                <p className="text-gray-500 text-sm">Gérez vos créations signées Marifath's Crochet</p>
               </div>
             </div>
             <button 
@@ -442,7 +518,7 @@ const App: React.FC = () => {
                  </h4>
               </div>
               <p className="text-gray-400 font-light leading-relaxed text-xl max-w-md">
-                Chaque maille raconte une histoire, chaque couleur un voyage. L'artisanat sénégalais au service de votre élégance azur.
+                Chaque maille raconte une histoire, chaque couleur un voyage. L'artisanat sénégalais au service de votre élégance signée Marifath's Crochet.
               </p>
               <div className="flex gap-6">
                 <a href="#" className="w-14 h-14 flex items-center justify-center bg-white/5 rounded-full hover:bg-[#00bcd4] hover:text-black transition-all duration-500"><Instagram className="w-7 h-7" /></a>
@@ -465,7 +541,7 @@ const App: React.FC = () => {
               <h5 className="text-sm font-black uppercase tracking-[0.4em] mb-10 text-[#e91e63]">L'Atelier WhatsApp</h5>
               <div className="bg-white/5 p-10 rounded-[2.5rem] border border-white/10 space-y-8 backdrop-blur-sm">
                 <p className="text-gray-300 text-lg italic font-light">
-                  "Une envie d'azur sur-mesure ? Discutons de votre prochaine pièce fétiche."
+                  "Envie d'une création Marifath's Crochet sur-mesure ? Discutons de votre prochaine pièce fétiche."
                 </p>
                 <a 
                   href={`https://wa.me/${WHATSAPP_NUMBER}`}
@@ -479,7 +555,7 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="pt-16 border-t border-white/5 flex flex-col md:row items-center justify-between gap-8 text-gray-600 text-xs font-bold uppercase tracking-[0.3em]">
-            <p>© {new Date().getFullYear()} {BRAND_NAME}. Azur is a State of Mind.</p>
+            <p>© {new Date().getFullYear()} {BRAND_NAME}. Marifath's Crochet est un état d'esprit.</p>
             <div className="flex gap-10">
               <button onClick={handleAdminToggle} className="hover:text-[#00bcd4] transition-colors">Portail Admin</button>
               <a href="#" className="hover:text-white transition-colors">Légal</a>
@@ -494,7 +570,7 @@ const App: React.FC = () => {
         className="fixed bottom-10 right-10 z-40 bg-[#25D366] text-white p-6 rounded-full shadow-2xl hover:scale-110 transition-all duration-500 active:scale-95 group"
       >
         <MessageCircle className="w-10 h-10" />
-        <span className="absolute right-full mr-6 top-1/2 -translate-y-1/2 bg-black text-white text-[10px] py-2 px-4 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-500 whitespace-nowrap tracking-[0.2em] font-black">ASSISTANCE AZUR</span>
+        <span className="absolute right-full mr-6 top-1/2 -translate-y-1/2 bg-black text-white text-[10px] py-2 px-4 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-500 whitespace-nowrap tracking-[0.2em] font-black">ASSISTANCE MARIFATH</span>
       </a>
 
       {/* MODAL: ADMIN LOGIN (PASSWORD PROTECTION) */}
@@ -565,7 +641,7 @@ const App: React.FC = () => {
               <div className="grid grid-cols-2 gap-6">
                 <div className="col-span-2">
                   <label className="text-xs font-black uppercase text-gray-400 block mb-2 tracking-widest">Nom de la pièce</label>
-                  <input name="name" defaultValue={editingProduct?.name} required className={`w-full border-none rounded-2xl p-4 focus:ring-2 focus:ring-[#00bcd4] text-lg ${isDarkMode ? 'bg-[#252525]' : 'bg-gray-50'}`} placeholder="ex: Robe L'Azur Éternel" />
+                  <input name="name" defaultValue={editingProduct?.name} required className={`w-full border-none rounded-2xl p-4 focus:ring-2 focus:ring-[#00bcd4] text-lg ${isDarkMode ? 'bg-[#252525]' : 'bg-gray-50'}`} placeholder="ex: Robe Signature Marifath" />
                 </div>
                 <div>
                   <label className="text-xs font-black uppercase text-gray-400 block mb-2 tracking-widest">Investissement (FCFA)</label>
@@ -606,7 +682,7 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md">
           <div className={`w-full max-w-xl rounded-[3rem] overflow-hidden shadow-2xl animate-scaleUp ${isDarkMode ? 'bg-[#1a1a1a] text-white' : 'bg-white text-gray-900'}`}>
             <div className={`p-10 border-b flex items-center justify-between ${isDarkMode ? 'bg-[#222] border-white/5' : 'bg-gray-50 border-gray-100'}`}>
-              <h2 className="text-3xl font-serif italic">Votre Récit Azur</h2>
+              <h2 className="text-3xl font-serif italic">Votre Récit Marifath</h2>
               <button onClick={() => setIsReviewModalOpen(false)} className="p-3 hover:bg-white/10 rounded-full transition-colors"><X /></button>
             </div>
             <form onSubmit={handleAddReview} className="p-10 space-y-8">
