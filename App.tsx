@@ -7,6 +7,8 @@ import {
 import { WHATSAPP_NUMBER, BRAND_NAME, ADMIN_PASSWORD } from './constants';
 import { Product, CartItem, Review } from './types';
 import { supabase } from './supabaseClient';
+import ok from './ok.png';
+import logo from './logo.png';
 
 type DbProduct = Product & { created_at?: string | null };
 type DbReview = {
@@ -349,7 +351,7 @@ const App: React.FC = () => {
           <div className="flex items-center gap-3 sm:gap-4">
             <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="md:hidden p-2 text-gray-600 border border-gray-200 rounded-2xl shadow-sm"><Menu /></button>
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveCategory('Tous')}>
-               <div className="w-10 h-10 bg-[#e91e63] rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-pink-200">M</div>
+               <img src={logo} alt={`${BRAND_NAME} logo`} className="w-10 h-10 rounded-full object-cover shadow-lg" />
                <span className="text-xl font-bold tracking-tight hidden sm:block">
                  <span className="text-[#e91e63]">Marifath's</span> <span className="text-[#00bcd4]">Crochet</span>
                </span>
@@ -406,7 +408,7 @@ const App: React.FC = () => {
           <div className="absolute inset-x-0 top-0 bg-white text-gray-900 rounded-b-[2.5rem] shadow-2xl p-6 space-y-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-[#e91e63] rounded-full flex items-center justify-center text-white font-bold text-2xl">M</div>
+                <img src={logo} alt={`${BRAND_NAME} logo`} className="w-12 h-12 rounded-full object-cover" />
                 <div>
                   <p className="text-sm uppercase tracking-[0.3em] text-gray-400">Marifath's</p>
                   <p className="text-xl font-bold text-[#00bcd4]">Crochet</p>
@@ -453,9 +455,10 @@ const App: React.FC = () => {
       <section className="pt-16 sm:pt-20">
         <div className="relative min-h-[70vh] sm:min-h-[80vh] w-full overflow-hidden">
           <img 
-            src="https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?auto=format&fit=crop&q=80&w=1920" 
+            src={ok}
             alt="Crochet Hero" 
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-contain object-center"
+            style={{ backgroundColor: isDarkMode ? '#000' : '#f3f4f6' }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex items-center justify-center px-4">
             <div className="text-center max-w-4xl px-2">
@@ -648,7 +651,7 @@ const App: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-12 gap-20 mb-32">
             <div className="md:col-span-5 space-y-10">
               <div className="flex items-center gap-5">
-                 <div className="w-16 h-16 bg-[#e91e63] rounded-full flex items-center justify-center text-white font-bold text-3xl shadow-2xl shadow-pink-900/50">M</div>
+                 <img src={logo} alt={`${BRAND_NAME} logo`} className="w-16 h-16 rounded-full object-cover shadow-2xl" />
                  <h4 className="text-4xl font-serif italic">
                    <span className="text-[#e91e63]">Marifath's</span> <span className="text-[#00bcd4]">Crochet</span>
                  </h4>
