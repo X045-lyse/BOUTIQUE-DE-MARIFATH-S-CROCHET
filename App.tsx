@@ -453,18 +453,17 @@ const App: React.FC = () => {
 
       {/* Hero Section */}
       <section className="pt-16 sm:pt-20">
-        <div className="relative min-h-[70vh] sm:min-h-[80vh] w-full overflow-hidden">
-          <img 
-            src={ok}
-            alt="Crochet Hero" 
-            className="absolute inset-0 w-full h-full object-contain object-center"
-            style={{ backgroundColor: isDarkMode ? '#000' : '#f3f4f6' }}
+        <div className="relative min-h-[50vh] sm:min-h-[70vh] md:min-h-[80vh] w-full overflow-hidden">
+          <div
+            className="absolute inset-0 bg-center bg-cover"
+            style={{ backgroundImage: `url(${ok})`, backgroundColor: isDarkMode ? '#000' : '#f3f4f6' }}
+            aria-hidden
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex items-center justify-center px-4">
             <div className="text-center max-w-4xl px-2">
               <h2 className="text-[#00bcd4] text-xs sm:text-sm font-bold uppercase tracking-[0.5em] mb-5 drop-shadow-lg">Atelier & Création</h2>
-              <h1 className="text-4xl sm:text-6xl lg:text-8xl text-white font-serif mb-6 sm:mb-8 italic drop-shadow-2xl leading-tight">Créations au Crochet</h1>
-              <p className="text-white/90 text-base sm:text-lg lg:text-2xl mb-8 sm:mb-12 font-light max-w-3xl mx-auto leading-relaxed px-1">
+              <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl text-white font-serif mb-4 sm:mb-6 italic drop-shadow-2xl leading-tight">Créations au Crochet</h1>
+              <p className="text-white/90 text-sm sm:text-base lg:text-xl mb-6 sm:mb-8 font-light max-w-3xl mx-auto leading-relaxed px-2">
                 Design et confection de vêtements en crochet, pièces uniques réalisées à la main par Marifath. Découvrez nos techniques, matériaux et finitions.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center">
@@ -537,7 +536,7 @@ const App: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-16">
           {filteredProducts.map(product => (
             <div key={product.id} className="group relative">
-              <div className="relative aspect-[3/4] overflow-hidden bg-gray-100 rounded-[2.5rem] shadow-2xl border border-transparent dark:border-white/5">
+              <div className="relative aspect-[4/5] sm:aspect-[3/4] lg:aspect-[3/4] overflow-hidden bg-gray-100 rounded-[2.5rem] shadow-2xl border border-transparent dark:border-white/5">
                 <img 
                   src={product.image} 
                   alt={product.name} 
@@ -660,8 +659,8 @@ const App: React.FC = () => {
                 Chaque maille est une conception, chaque pièce est confectionnée à la main. Découvrez nos vêtements au crochet, pensés et réalisés pour durer.
               </p>
               <div className="flex gap-6">
-                <a href="#" className="w-14 h-14 flex items-center justify-center bg-white/5 rounded-full hover:bg-[#00bcd4] hover:text-black transition-all duration-500"><Instagram className="w-7 h-7" /></a>
-                <a href="#" className="w-14 h-14 flex items-center justify-center bg-white/5 rounded-full hover:bg-[#00bcd4] hover:text-black transition-all duration-500"><Facebook className="w-7 h-7" /></a>
+                <a href="https://www.instagram.com/marifathdesigncollection?igsh=aXR1MXNrMGl6YXE1&utm_source=qr" target="_blank" rel="noreferrer" className="w-14 h-14 flex items-center justify-center bg-white/5 rounded-full hover:bg-[#00bcd4] hover:text-black transition-all duration-500"><Instagram className="w-7 h-7" /></a>
+                <a href="https://www.facebook.com/share/1BSSXhqiyZ/?mibextid=wwXIfr" target="_blank" rel="noreferrer" className="w-14 h-14 flex items-center justify-center bg-white/5 rounded-full hover:bg-[#00bcd4] hover:text-black transition-all duration-500"><Facebook className="w-7 h-7" /></a>
               </div>
             </div>
 
