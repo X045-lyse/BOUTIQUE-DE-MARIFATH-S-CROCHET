@@ -134,6 +134,33 @@ const App: React.FC = () => {
     fetchReviews();
   }, [fetchProducts, fetchReviews]);
 
+  // Seed products that have no image with Unsplash crochet images (admin action)
+  const seedProductImages = async () => {
+    if (!confirm('Remplir les produits sans image avec des images d\'exemple depuis Unsplash ?')) return;
+    try {
+      const { data: prods, error } = await supabase.from('products').select('id,image');
+      if (error) {
+        console.error('Failed to fetch products for seeding', error);
+        alert('Erreur lors de la lecture des produits. Voir la console.');
+        return;
+      }
+
+      for (const p of (prods || []) as any[]) {
+        if (!p.image) {
+          const url = `https://source.unsplash.com/800x1000/?crochet,clothing&sig=${encodeURIComponent(p.id)}`;
+          const { error: upErr } = await supabase.from('products').update({ image: url }).eq('id', p.id);
+          if (upErr) console.error('Failed to seed product', p.id, upErr);
+        }
+      }
+
+      await fetchProducts();
+      alert('Images d\'exemple ajoutées aux produits sans image.');
+    } catch (err) {
+      console.error('Unexpected error in seedProductImages', err);
+      alert('Erreur inattendue lors du seed. Voir la console.');
+    }
+  };
+
   // --- PERSISTENCE (theme only) ---
   useEffect(() => {
     localStorage.setItem('mc_theme', isDarkMode ? 'dark' : 'light');
@@ -151,6 +178,44 @@ const App: React.FC = () => {
       return [...prev, { ...product, quantity: 1 }];
     });
     setIsCartOpen(true);
+  };
+
+  // Remove image from a product (keep product but clear its image)
+  const removeProductImage = async (id: string) => {
+    if (!confirm('Supprimer l\'image de cette création ?')) return;
+    try {
+      const { data: prodData, error: prodError } = await supabase.from('products').select('image').eq('id', id).single();
+      if (prodError) {
+        console.error('Failed to fetch product image for removal', prodError);
+      } else {
+        const img = prodData?.image as string | undefined;
+        if (img && SUPABASE_BUCKET && img.startsWith('http') && img.includes('/storage/v1/object/public/')) {
+          try {
+            const marker = `/storage/v1/object/public/${String(SUPABASE_BUCKET)}/`;
+            const parts = img.split(marker);
+            const objectPath = parts[1] || img.split('/storage/v1/object/public/')[1];
+            if (objectPath) {
+              const { error: removeErr } = await supabase.storage.from(String(SUPABASE_BUCKET)).remove([decodeURIComponent(objectPath)]);
+              if (removeErr) console.error('Storage remove error', removeErr);
+            }
+          } catch (e) {
+            console.error('Exception while removing storage object', e);
+          }
+        }
+      }
+
+      // update product row to clear image
+      const { error } = await supabase.from('products').update({ image: '' }).eq('id', id);
+      if (error) {
+        console.error('Failed to clear product image in DB', error);
+        alert('Impossible de mettre à jour le produit. Voir la console.');
+        return;
+      }
+
+      await fetchProducts();
+    } catch (err) {
+      console.error('Unexpected error in removeProductImage', err);
+    }
   };
 
   const removeFromCart = (id: string) => {
@@ -365,6 +430,31 @@ const App: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
+  // Remove image from storage (if applicable) and clear related form fields
+  const handleRemoveImage = async (hiddenFieldId: string, visibleFieldName?: string) => {
+    try {
+      const hidden = document.getElementById(hiddenFieldId) as HTMLInputElement | null;
+      const visible = visibleFieldName ? document.querySelector(`input[name="${visibleFieldName}"]`) as HTMLInputElement | null : null;
+      const fileInput = document.getElementById(hiddenFieldId.replace('_val', '_input')) as HTMLInputElement | null;
+      const val = hidden?.value;
+      if (val && SUPABASE_BUCKET && val.startsWith('http') && val.includes('/storage/v1/object/public/')) {
+        const marker = `/storage/v1/object/public/${String(SUPABASE_BUCKET)}/`;
+        const parts = val.split(marker);
+        const objectPath = parts[1] || val.split('/storage/v1/object/public/')[1];
+        if (objectPath) {
+          const { error: removeErr } = await supabase.storage.from(String(SUPABASE_BUCKET)).remove([decodeURIComponent(objectPath)]);
+          if (removeErr) console.error('Error removing object from storage', removeErr);
+        }
+      }
+
+      if (hidden) hidden.value = '';
+      if (visible) visible.value = '';
+      if (fileInput) fileInput.value = '';
+    } catch (err) {
+      console.error('Error in handleRemoveImage', err);
+    }
+  };
+
   const categories = ['Tous', 'Hauts', 'Robes', 'Accessoires', 'Ensembles'];
   const filteredProducts = activeCategory === 'Tous' 
     ? products 
@@ -415,6 +505,9 @@ const App: React.FC = () => {
               {isAdmin ? <LogOut className="w-5 h-5" /> : <Settings className="w-5 h-5" />}
               {isAdmin && <span className="text-xs font-bold uppercase hidden sm:inline">Admin</span>}
             </button>
+            {isAdmin && (
+              <button onClick={seedProductImages} className="ml-2 p-2 text-xs bg-emerald-300 rounded-md hidden sm:inline">Seed images</button>
+            )}
             
             <button onClick={() => setIsCartOpen(true)} className="relative p-2 hover:text-[#e91e63] transition-colors">
               <ShoppingBag className="w-6 h-6" />
@@ -490,11 +583,11 @@ const App: React.FC = () => {
             style={{ backgroundImage: `url(${ok})`, backgroundColor: isDarkMode ? '#000' : '#f3f4f6' }}
             aria-hidden
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex items-center justify-center px-4">
-            <div className="text-center max-w-4xl px-2">
-              <h2 className="text-[#00bcd4] text-xs sm:text-sm font-bold uppercase tracking-[0.5em] mb-5 drop-shadow-lg">Atelier & Création</h2>
-              <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl text-white font-serif mb-4 sm:mb-6 italic drop-shadow-2xl leading-tight">Créations au Crochet</h1>
-              <p className="text-white/90 text-sm sm:text-base lg:text-xl mb-6 sm:mb-8 font-light max-w-3xl mx-auto leading-relaxed px-2">
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-center justify-center px-4">
+            <div className="text-center max-w-4xl px-2 bg-white/85 text-black rounded-2xl p-6 sm:p-10">
+              <h2 className="text-[#00bcd4] text-xs sm:text-sm font-bold uppercase tracking-[0.5em] mb-3">Atelier & Création</h2>
+              <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-serif mb-2 italic leading-tight">Créations au Crochet</h1>
+              <p className="text-black/85 text-sm sm:text-base lg:text-xl mb-4 sm:mb-6 font-light max-w-3xl mx-auto leading-relaxed px-2">
                 Design et confection de vêtements en crochet, pièces uniques réalisées à la main par Marifath. Découvrez nos techniques, matériaux et finitions.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center">
@@ -564,17 +657,17 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-16">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
           {filteredProducts.map(product => (
             <div key={product.id} className="group relative">
               <div className="relative aspect-[4/5] sm:aspect-[3/4] lg:aspect-[3/4] overflow-hidden bg-gray-100 rounded-[2.5rem] shadow-2xl border border-transparent dark:border-white/5">
                 <div
                   role="img"
                   aria-label={product.name}
-                  style={{ backgroundImage: `url(${product.image})` }}
-                  className="w-full h-full bg-center bg-cover transition-transform duration-1000 group-hover:scale-110"
+                  style={{ backgroundImage: `url(${product.image && product.image.length ? product.image : 'https://source.unsplash.com/800x1000/?crochet,clothing'})` }}
+                  className="w-full h-full bg-center bg-cover transition-transform duration-700 group-hover:scale-105"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-100 transition-opacity duration-500" />
                 
                 {/* Product Controls */}
                 <div className="absolute top-6 right-6 flex flex-col gap-3">
@@ -590,6 +683,13 @@ const App: React.FC = () => {
                         <Edit2 className="w-6 h-6" />
                       </button>
                       <button 
+                        onClick={() => removeProductImage(product.id)}
+                        title="Supprimer l'image"
+                        className="bg-yellow-400 text-black p-3 rounded-full hover:bg-yellow-300 shadow-xl transition-all"
+                      >
+                        <Camera className="w-5 h-5" />
+                      </button>
+                      <button 
                         onClick={() => deleteProduct(product.id)}
                         className="bg-red-600 text-white p-4 rounded-full hover:bg-red-700 shadow-xl transition-all"
                       >
@@ -599,7 +699,7 @@ const App: React.FC = () => {
                   )}
                 </div>
 
-                <div className="absolute bottom-0 left-0 right-0 p-10 translate-y-full group-hover:translate-y-0 transition-transform duration-700 ease-out">
+                <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-10 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out">
                   <button 
                     onClick={() => addToCart(product)}
                     className="w-full bg-[#00bcd4] text-black py-5 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-2xl shadow-cyan-900/60 active:scale-95 transition-all"
@@ -616,8 +716,8 @@ const App: React.FC = () => {
                   <div className={`h-[1px] flex-grow ${isDarkMode ? 'bg-white/10' : 'bg-gray-100'}`}></div>
                   <span className="text-[#e91e63] font-black text-xs uppercase tracking-tighter italic">Signature Marifath</span>
                 </div>
-                <h3 className="text-3xl font-serif italic mt-3 tracking-tight" style={{maxHeight: '3.2rem', overflow: 'hidden'}}>{product.name}</h3>
-                <p className={`mt-3 text-base font-light italic leading-relaxed ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} style={{maxHeight: '4.5rem', overflow: 'hidden'}}>{product.description}</p>
+                <h3 className="text-2xl sm:text-3xl font-serif italic mt-3 tracking-tight" style={{maxHeight: '3.2rem', overflow: 'hidden'}}>{product.name}</h3>
+                <p className={`mt-2 text-sm sm:text-base font-light italic leading-relaxed ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} style={{maxHeight: '4.5rem', overflow: 'hidden'}}>{product.description}</p>
                 <div className="mt-6 flex items-center justify-between">
                    <p className="text-3xl font-black">
                     {product.price.toLocaleString()} <span className="text-sm font-bold text-[#00bcd4] tracking-widest ml-1">FCFA</span>
@@ -859,7 +959,9 @@ const App: React.FC = () => {
                         <Camera className="text-[#00bcd4] w-7 h-7" />
                         <span className="text-sm text-gray-500">Téléverser depuis votre appareil</span>
                         <input id="prod_img_input" type="file" onChange={(e) => handleImageUpload(e, 'prod_img_val')} accept="image/*" className="sr-only" />
+                        <input id="prod_img_input" type="file" onChange={(e) => handleImageUpload(e, 'prod_img_val')} accept="image/*" className="sr-only" />
                         <label htmlFor="prod_img_input" className="ml-auto bg-[#00bcd4] text-black px-4 py-2 rounded-xl font-semibold cursor-pointer hover:opacity-90">Choisir une image</label>
+                        <button type="button" onClick={() => handleRemoveImage('prod_img_val', 'image')} className="ml-3 text-sm text-red-500 hover:underline">Supprimer l'image</button>
                       </div>
                       <input
                         name="image"
@@ -937,6 +1039,7 @@ const App: React.FC = () => {
                   <span className="text-sm text-gray-500 font-medium">Capturer la pièce portée</span>
                   <input id="rev_img_input" type="file" onChange={(e) => handleImageUpload(e, 'rev_img_val')} accept="image/*" className="sr-only" />
                   <label htmlFor="rev_img_input" className="ml-auto px-4 py-2 bg-[#e91e63] text-white rounded-xl font-semibold cursor-pointer hover:opacity-90">Ajouter une photo</label>
+                  <button type="button" onClick={() => handleRemoveImage('rev_img_val')} className="ml-3 text-sm text-red-500 hover:underline">Supprimer l'image</button>
                 </div>
               </div>
               <button type="submit" className="w-full bg-[#e91e63] text-white py-6 rounded-2xl font-black shadow-2xl shadow-pink-900/40 active:scale-95 transition-all uppercase tracking-[0.3em] text-sm">
